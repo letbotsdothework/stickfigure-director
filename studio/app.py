@@ -1,11 +1,23 @@
 import os, re, json, shutil, subprocess, sys
-from flask import Flask, jsonify, request, send_file, abort
+from flask import Flask, jsonify, request, send_file, abort, Response
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.environ.get("PROJECTS_ROOT", "/opt/data/workspace/stickfigure-director")
 REGISTRY = os.path.join(ROOT, ".studio.json")
 
 app = Flask(__name__, static_folder=os.path.join(APP_DIR, "static"), static_url_path="")
+
+STUDIO_USERNAME = os.environ.get("STUDIO_USERNAME", "matthias")
+STUDIO_PASSWORD = os.environ.get("STUDIO_PASSWORD", "")
+
+
+@app.before_request
+def _require_auth():
+    if not STUDIO_PASSWORD:
+        return  # no password configured -> open (dev mode)
+    auth = request.authorization
+    if not auth or auth.username != STUDIO_USERNAME or auth.password != STUDIO_PASSWORD:
+        return Response("Unauthorized", 401, {"WWW-Authenticate": 'Basic realm="studio"'})
 
 
 def load_registry():
