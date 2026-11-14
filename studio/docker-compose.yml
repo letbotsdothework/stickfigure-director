@@ -1,0 +1,10 @@
+services:
+  studio:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - /opt/data/workspace/stickfigure-director:/data
+    environment:
+      - PROJECTS_ROOT=/data
+    restart: unless-stopped
