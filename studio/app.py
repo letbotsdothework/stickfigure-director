@@ -211,10 +211,12 @@ def api_queue_add():
     topic = (data.get("topic") or "").strip()
     if not topic:
         abort(400, "topic required")
+    notes = (data.get("notes") or "").strip()
     q = load_queue()
     entry = {
         "id": uuid.uuid4().hex[:8],
         "topic": topic,
+        "notes": notes,
         "status": "pending",
         "project_id": None,
         "created_at": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()),

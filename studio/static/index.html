@@ -52,7 +52,10 @@
   .qitem.clickable { cursor:pointer; }
   .qitem.clickable:hover { border-color:var(--accent); }
   .qitem .t { font-size:13px; font-weight:600; padding-right:18px; }
+  .qitem .n { font-size:11px; color:var(--muted); font-style:italic; margin-top:2px; padding-right:14px; }
   .qitem .s { font-size:11px; color:var(--muted); margin-top:3px; }
+  .queuenotes { width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 8px; font-size:12px; margin-bottom:10px; }
+  .queuenotes:focus { outline:none; border-color:var(--accent); }
   .qitem .x { position:absolute; top:8px; right:8px; color:var(--muted); cursor:pointer; font-size:12px; }
   .qitem .x:hover { color:var(--danger); }
   .qstat { display:inline-block; font-size:10px; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
@@ -71,6 +74,7 @@
         <input type="text" id="newtopic" placeholder="What if …?">
         <button id="addtopic" title="Thema einreihen">+</button>
       </div>
+      <input type="text" id="newnotes" class="queuenotes" placeholder="Richtung / Inhalte (optional) …">
       <div id="queuelist"></div>
     </div>
     <div class="sec">
@@ -220,7 +224,8 @@ function renderQueue(list) {
       : pr.scene_count ? ` · ${pr.scene_count} Szenen` : '';
     const d = document.createElement('div');
     d.className = 'qitem' + (e.project_id ? ' clickable' : '');
-    d.innerHTML = `<span class="x" title="entfernen">✕</span><div class="t">${esc(e.topic)}${st}</div><div class="s">${esc(e.status)}${prog}</div>`;
+    const notesHtml = e.notes ? `<div class="n">${esc(e.notes)}</div>` : '';
+    d.innerHTML = `<span class="x" title="entfernen">✕</span><div class="t">${esc(e.topic)}${st}</div>${notesHtml}<div class="s">${esc(e.status)}${prog}</div>`;
     d.querySelector('.x').onclick = (ev) => { ev.stopPropagation(); delTopic(e.id); };
     if (e.project_id) d.onclick = () => openProject(e.project_id);
     el.appendChild(d);
@@ -229,11 +234,14 @@ function renderQueue(list) {
 
 async function addTopic() {
   const inp = document.getElementById('newtopic');
+  const notesInp = document.getElementById('newnotes');
   const topic = inp.value.trim();
   if (!topic) { inp.focus(); return; }
+  const notes = notesInp.value.trim();
   try {
-    await api('/api/queue', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({topic}) });
+    await api('/api/queue', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({topic, notes}) });
     inp.value = '';
+    notesInp.value = '';
     toast('Thema zur Warteliste hinzugefügt ✓');
     await loadQueue();
   } catch (e) { toast('Fehler: ' + e.message); }
@@ -265,6 +273,7 @@ document.getElementById('newproj').onclick = async () => {
 
 document.getElementById('addtopic').onclick = addTopic;
 document.getElementById('newtopic').addEventListener('keydown', (e) => { if (e.key === 'Enter') addTopic(); });
+document.getElementById('newnotes').addEventListener('keydown', (e) => { if (e.key === 'Enter') addTopic(); });
 
 loadProjects();
 loadQueue();

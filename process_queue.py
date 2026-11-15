@@ -30,8 +30,11 @@ def save_queue(q):
 
 def process_one(entry, env):
     topic = entry["topic"]
+    notes = (entry.get("notes") or "").strip()
     print(f"topic: {topic}")
-    script = validate(call_deepseek(topic, env))
+    if notes:
+        print(f"  direction: {notes}")
+    script = validate(call_deepseek(topic, env, direction=notes))
     pid = slugify(script["title"])[:60]
     d = os.path.join(ROOT, pid)
     n = 2

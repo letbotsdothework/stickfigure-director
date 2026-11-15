@@ -53,9 +53,11 @@ def slugify(s):
     return s or "project"
 
 
-def call_deepseek(topic, env, feedback="", existing=None):
+def call_deepseek(topic, env, feedback="", existing=None, direction=""):
     url = env["DEEPSEEK_BASE_URL"].rstrip("/") + "/chat/completions"
     user = f"Topic: {topic}"
+    if direction:
+        user += f"\n\nStory direction / requested content (follow this): {direction}"
     if feedback:
         user += f"\n\nRevision instructions (follow exactly): {feedback}"
     if existing:
