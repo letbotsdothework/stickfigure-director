@@ -44,14 +44,40 @@
   .toast { position:fixed; bottom:20px; right:20px; background:#1a2e1a; border:1px solid var(--green); color:var(--green); padding:10px 16px; border-radius:8px; display:none; z-index:10; }
   .hint { color:var(--muted); font-size:12px; }
   #empty { color:var(--muted); }
+  .queueadd { display:flex; gap:6px; margin-bottom:10px; }
+  .queueadd input { flex:1; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px 8px; font-size:13px; min-width:0; }
+  .queueadd input:focus { outline:none; border-color:var(--accent); }
+  .queueadd button { padding:6px 11px; flex-shrink:0; }
+  .qitem { padding:8px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px; background:var(--panel2); position:relative; }
+  .qitem.clickable { cursor:pointer; }
+  .qitem.clickable:hover { border-color:var(--accent); }
+  .qitem .t { font-size:13px; font-weight:600; padding-right:18px; }
+  .qitem .s { font-size:11px; color:var(--muted); margin-top:3px; }
+  .qitem .x { position:absolute; top:8px; right:8px; color:var(--muted); cursor:pointer; font-size:12px; }
+  .qitem .x:hover { color:var(--danger); }
+  .qstat { display:inline-block; font-size:10px; padding:1px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+  .qstat.pending { background:#2a2a1a; color:#e6c66b; }
+  .qstat.scripted { background:#13233a; color:var(--accent); }
+  .qstat.done { background:#1a2e1a; color:var(--green); }
 </style>
 </head>
 <body>
 <div id="app">
   <aside id="sidebar">
     <h1>🎬 Studio</h1>
-    <div id="projlist"></div>
-    <button id="newproj" class="ghost" style="width:100%;margin-top:12px">+ Neues Projekt</button>
+    <div class="sec">
+      <h2>Warteliste</h2>
+      <div class="queueadd">
+        <input type="text" id="newtopic" placeholder="What if …?">
+        <button id="addtopic" title="Thema einreihen">+</button>
+      </div>
+      <div id="queuelist"></div>
+    </div>
+    <div class="sec">
+      <h2>Projekte</h2>
+      <div id="projlist"></div>
+      <button id="newproj" class="ghost" style="width:100%;margin-top:12px">+ Neues Projekt</button>
+    </div>
   </aside>
   <main id="main">
     <div id="empty" class="hint">Projekt links auswählen.</div>
@@ -175,7 +201,53 @@ async function confirmProject() {
   await openProject(state.current);
 }
 
-function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+async function loadQueue() {
+  const q = await api('/api/queue');
+  renderQueue(q.queue);
+}
+
+function renderQueue(list) {
+  const el = document.getElementById('queuelist');
+  el.innerHTML = '';
+  if (!list.length) { el.innerHTML = '<div class="hint">Keine Themen.</div>'; return; }
+  for (const e of list) {
+    const st = e.status === 'done' ? '<span class="qstat done">✓ fertig</span>'
+      : e.status === 'scripted' ? '<span class="qstat scripted">Skript ✓</span>'
+      : '<span class="qstat pending">wartet</span>';
+    const pr = e.progress || {};
+    const prog = pr.has_master ? ' · Master ✓'
+      : pr.clips ? ` · ${pr.clips}/${pr.scene_count} Clips`
+      : pr.scene_count ? ` · ${pr.scene_count} Szenen` : '';
+    const d = document.createElement('div');
+    d.className = 'qitem' + (e.project_id ? ' clickable' : '');
+    d.innerHTML = `<span class="x" title="entfernen">✕</span><div class="t">${esc(e.topic)}${st}</div><div class="s">${esc(e.status)}${prog}</div>`;
+    d.querySelector('.x').onclick = (ev) => { ev.stopPropagation(); delTopic(e.id); };
+    if (e.project_id) d.onclick = () => openProject(e.project_id);
+    el.appendChild(d);
+  }
+}
+
+async function addTopic() {
+  const inp = document.getElementById('newtopic');
+  const topic = inp.value.trim();
+  if (!topic) { inp.focus(); return; }
+  try {
+    await api('/api/queue', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({topic}) });
+    inp.value = '';
+    toast('Thema zur Warteliste hinzugefügt ✓');
+    await loadQueue();
+  } catch (e) { toast('Fehler: ' + e.message); }
+}
+
+async function delTopic(id) {
+  if (!confirm('Thema aus der Warteliste entfernen?')) return;
+  try {
+    await api('/api/queue/' + id, { method:'DELETE' });
+    await loadQueue();
+  } catch (e) { toast('Fehler: ' + e.message); }
+}
+
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;'); }
 function fmt(b) { return b > 1048576 ? (b/1048576).toFixed(0) + ' MB' : (b/1024).toFixed(0) + ' KB'; }
 
 document.getElementById('newproj').onclick = async () => {
@@ -191,7 +263,11 @@ document.getElementById('newproj').onclick = async () => {
   } catch (e) { toast('Fehler: ' + e.message); }
 };
 
+document.getElementById('addtopic').onclick = addTopic;
+document.getElementById('newtopic').addEventListener('keydown', (e) => { if (e.key === 'Enter') addTopic(); });
+
 loadProjects();
+loadQueue();
 </script>
 </body>
 </html>

@@ -1,9 +1,10 @@
-import os, re, json, shutil, subprocess, sys
+import os, re, json, shutil, subprocess, sys, uuid, time
 from flask import Flask, jsonify, request, send_file, abort, Response
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.environ.get("PROJECTS_ROOT", "/opt/data/workspace/stickfigure-director")
 REGISTRY = os.path.join(ROOT, ".studio.json")
+QUEUE = os.path.join(ROOT, "queue.json")
 
 app = Flask(__name__, static_folder=os.path.join(APP_DIR, "static"), static_url_path="")
 
@@ -33,6 +34,21 @@ def save_registry(reg):
     json.dump(reg, open(REGISTRY, "w"), indent=2, ensure_ascii=False)
 
 
+def load_queue():
+    if os.path.exists(QUEUE):
+        try:
+            q = json.load(open(QUEUE))
+            if isinstance(q, dict) and isinstance(q.get("queue"), list):
+                return q
+        except Exception:
+            pass
+    return {"queue": []}
+
+
+def save_queue(q):
+    json.dump(q, open(QUEUE, "w"), indent=2, ensure_ascii=False)
+
+
 def pdir(pid):
     d = os.path.join(ROOT, pid)
     if os.path.isdir(d) and os.path.isfile(os.path.join(d, "script.json")):
@@ -59,6 +75,21 @@ def find_preview(d):
 def slugify(s):
     s = re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
     return s or "project"
+
+
+def project_progress(pid):
+    d = pdir(pid)
+    if not d:
+        return None
+    script = json.load(open(os.path.join(d, "script.json")))
+    cdir = os.path.join(d, "clips")
+    nclips = len([f for f in os.listdir(cdir) if f.endswith(".mp4")]) if os.path.isdir(cdir) else 0
+    return {
+        "scene_count": len(script.get("scenes", [])),
+        "clips": nclips,
+        "has_master": find_master(d) is not None,
+        "has_preview": find_preview(d) is not None,
+    }
 
 
 @app.route("/")
@@ -164,6 +195,42 @@ def api_create():
     script = {"title": title, "topic": data.get("topic", "").strip(), "language": "en", "scenes": []}
     json.dump(script, open(os.path.join(d, "script.json"), "w"), indent=2, ensure_ascii=False)
     return jsonify({"ok": True, "id": pid})
+
+
+@app.route("/api/queue")
+def api_queue():
+    q = load_queue()
+    for e in q["queue"]:
+        e["progress"] = project_progress(e.get("project_id")) if e.get("project_id") else None
+    return jsonify(q)
+
+
+@app.route("/api/queue", methods=["POST"])
+def api_queue_add():
+    data = request.get_json(force=True)
+    topic = (data.get("topic") or "").strip()
+    if not topic:
+        abort(400, "topic required")
+    q = load_queue()
+    entry = {
+        "id": uuid.uuid4().hex[:8],
+        "topic": topic,
+        "status": "pending",
+        "project_id": None,
+        "created_at": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()),
+        "updated_at": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()),
+    }
+    q["queue"].append(entry)
+    save_queue(q)
+    return jsonify({"ok": True, "entry": entry})
+
+
+@app.route("/api/queue/<qid>", methods=["DELETE"])
+def api_queue_remove(qid):
+    q = load_queue()
+    q["queue"] = [e for e in q["queue"] if e["id"] != qid]
+    save_queue(q)
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
